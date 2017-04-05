@@ -8,13 +8,22 @@ namespace Java.Interop {
 
 	public partial class JniRuntime {
 
-		public class JniTypeManager : ISetRuntime {
+		public class JniTypeManager : IDisposable, ISetRuntime {
 
 			public      JniRuntime  Runtime { get; private set; }
 
 			public virtual void OnSetRuntime (JniRuntime runtime)
 			{
 				Runtime = runtime;
+			}
+
+			public void Dispose ()
+			{
+				Dispose (false);
+			}
+
+			protected virtual void Dispose (bool disposing)
+			{
 			}
 
 			public JniTypeSignature GetTypeSignature (Type type)
