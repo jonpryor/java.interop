@@ -83,6 +83,7 @@ namespace Java.Interop.Tools.JavaSource {
 		{
 			CommentTerminal single_line_comment = new CommentTerminal ("SingleLineComment", "//", "\r", "\n");
 			CommentTerminal delimited_comment = new CommentTerminal ("DelimitedComment", "/*", "*/");
+			CommentTerminal javadoc_comment = new CommentTerminal ("JavaDocComment", "/**", "*/");
 
 			NonGrammarTerminals.Add (single_line_comment);
 			NonGrammarTerminals.Add (delimited_comment);

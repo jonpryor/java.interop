@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Xml;
 
@@ -37,6 +38,8 @@ namespace Xamarin.Android.Tools.ApiXmlAdjuster
 		{
 			return string.Format ("[Package] " + Name);
 		}
+
+		public  Collection<string>  Imports {get;}  = new Collection<string> ();
 	}
 
 	public abstract partial class JavaType
