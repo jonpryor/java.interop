@@ -1,7 +1,7 @@
 #include <stdlib.h>
-#include <dlfcn.h>
 
 #include "java-interop-jvm.h"
+#include "java-interop-dlfcn.h"
 #include "java-interop-logger.h"
 #include "java-interop-util.h"
 
@@ -33,11 +33,14 @@ java_interop_jvm_load_with_error_message (const char *path, char **error_message
 		return JAVA_INTEROP_JVM_FAILED_OOM;
 	}
 
-	jvm->dl_handle = dlopen (path, RTLD_LAZY);
+	char *error    = nullptr;
+	jvm->dl_handle = java_interop_load_library (path, 0, &error);
 	if (!jvm->dl_handle) {
 		if (error_message) {
-			*error_message = java_interop_strdup (dlerror ());
+			*error_message = error;
+			error          = nullptr;
 		}
+		free (error);
 		free (jvm);
 		jvm = NULL;
 		return JAVA_INTEROP_JVM_FAILED_NOT_LOADED;
@@ -46,10 +49,13 @@ java_interop_jvm_load_with_error_message (const char *path, char **error_message
 	int symbols_missing = 0;
 
 #define LOAD_SYMBOL_CAST(symbol, Type) do { \
-		jvm->symbol = reinterpret_cast<Type>(dlsym (jvm->dl_handle, #symbol)); \
+		error = nullptr; \
+		jvm->symbol = reinterpret_cast<Type>(java_interop_get_symbol_address (jvm->dl_handle, #symbol, &error)); \
 		if (!jvm->symbol) { \
-			log_error (LOG_DEFAULT, "Failed to load JVM symbol: %s", #symbol); \
+			log_error (LOG_DEFAULT, "Failed to load JVM symbol: %s: %s", #symbol, error); \
 			symbols_missing = 1; \
+			free (error); \
+			error = nullptr; \
 		} \
 	} while (0)
 #define LOAD_SYMBOL(symbol) LOAD_SYMBOL_CAST(symbol, java_interop_ ## symbol ## _fptr)
@@ -61,7 +67,7 @@ java_interop_jvm_load_with_error_message (const char *path, char **error_message
 #undef LOAD_SYMBOL
 
 	if (symbols_missing) {
-		dlclose (jvm->dl_handle);
+		java_interop_close_library (jvm->dl_handle, nullptr);
 		free (jvm);
 		jvm = NULL;
 		return JAVA_INTEROP_JVM_FAILED_SYMBOL_MISSING;

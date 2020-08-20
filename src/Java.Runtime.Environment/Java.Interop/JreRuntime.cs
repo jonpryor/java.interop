@@ -7,6 +7,8 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 
+[assembly: DefaultDllImportSearchPathsAttribute (DllImportSearchPath.SafeDirectories | DllImportSearchPath.AssemblyDirectory)]
+
 namespace Java.Interop {
 
 	struct JavaVMInitArgs {
