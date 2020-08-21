@@ -10,6 +10,7 @@
 #include <winbase.h>
 #else
 #include <dlfcn.h>
+#include <string.h>
 #endif
 
 static char *
@@ -93,10 +94,19 @@ java_interop_load_library (const char *path, unsigned int flags, char **error)
 		_set_error (error, "path=nullptr is not supported");
 		return nullptr;
 	}
+#if 0
 	if (flags != 0) {
 		_set_error (error, "flags has unsupported value");
 		return nullptr;
 	}
+#elif !defined (WINDOWS)
+	char buf[512];
+	buf[0] = '\0';
+	if ((flags & RTLD_LAZY) == RTLD_LAZY)     strcat (buf, " RTLD_LAZY");
+	if ((flags & RTLD_GLOBAL) == RTLD_GLOBAL) strcat (buf, " RTLD_GLOBAL");
+	if ((flags & RTLD_NOW) == RTLD_NOW)       strcat (buf, " RTLD_NOW");
+	log_warn (LOG_DEFAULT, "# jonp: java_interop_load_library flags=%s", buf);
+#endif
 
 	void *handle    = nullptr;
 
