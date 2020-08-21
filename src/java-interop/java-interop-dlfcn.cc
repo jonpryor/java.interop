@@ -1,6 +1,7 @@
 #include "java-interop.h"
 #include "java-interop-dlfcn.h"
 #include "java-interop-util.h"
+#include "java-interop-logger.h"
 
 #ifdef WINDOWS
 #include <libloaderapi.h>
@@ -59,6 +60,7 @@ _free_error (char **error)
 static void
 _set_error (char **error, const char *message)
 {
+	log_warn (LOG_DEFAULT, "# jonp: _set_error: message=%s", message);
 	if (error == nullptr)
 		return;
 	*error = java_interop_strdup (message);
@@ -67,14 +69,25 @@ _set_error (char **error, const char *message)
 static void
 _set_error_to_last_error (char **error)
 {
+#if 1
+	char *m = _get_last_dlerror ();
+	log_warn (LOG_DEFAULT, "# jonp: _set_error_to_last_error: %s", m);
+	if (error != nullptr) {
+		*error = m;
+		return;
+	}
+	free (m);
+#else
 	if (error == nullptr)
 		return;
 	*error = _get_last_dlerror ();
+#endif
 }
 
 void*
 java_interop_load_library (const char *path, unsigned int flags, char **error)
 {
+	log_warn (LOG_DEFAULT, "# jonp: java_interop_load_library: path=`%s`", path);
 	_free_error (error);
 	if (path == nullptr) {
 		_set_error (error, "path=nullptr is not supported");
@@ -105,7 +118,7 @@ java_interop_load_library (const char *path, unsigned int flags, char **error)
 
 #else   // ndef WINDOWS
 
-	handle  = dlopen (path, RTLD_LAZY | RTLD_LOCAL);
+	handle  = dlopen (path, flags);
 
 #endif  // ndef WINDOWS
 
@@ -119,6 +132,7 @@ java_interop_load_library (const char *path, unsigned int flags, char **error)
 void*
 java_interop_get_symbol_address (void *library, const char *symbol, char **error)
 {
+	log_warn (LOG_DEFAULT, "# jonp: java_interop_get_symbol_address: library=%p symbol=%s", library, symbol);
 	_free_error (error);
 
 	if (library == nullptr) {
@@ -147,6 +161,7 @@ java_interop_get_symbol_address (void *library, const char *symbol, char **error
 	if (address == nullptr) {
 		_set_error_to_last_error (error);
 	}
+	log_warn (LOG_DEFAULT, "# jonp: java_interop_get_symbol_address: address=%p", address);
 
 	return address;
 }
@@ -154,6 +169,7 @@ java_interop_get_symbol_address (void *library, const char *symbol, char **error
 int
 java_interop_close_library (void* library, char **error)
 {
+	log_warn (LOG_DEFAULT, "# jonp: java_interop_close_library: library=%p", library);
 	_free_error (error);
 	if (library == nullptr) {
 		_set_error (error, "library=nullptr");
