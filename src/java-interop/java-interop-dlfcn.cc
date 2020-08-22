@@ -104,8 +104,10 @@ java_interop_load_library (const char *path, unsigned int flags, char **error)
 	buf[0] = '\0';
 	if ((flags & RTLD_LAZY) == RTLD_LAZY)     strcat (buf, " RTLD_LAZY");
 	if ((flags & RTLD_GLOBAL) == RTLD_GLOBAL) strcat (buf, " RTLD_GLOBAL");
+	if ((flags & RTLD_LOCAL) == RTLD_LOCAL)   strcat (buf, " RTLD_LOCAL");
 	if ((flags & RTLD_NOW) == RTLD_NOW)       strcat (buf, " RTLD_NOW");
-	log_warn (LOG_DEFAULT, "# jonp: java_interop_load_library flags=%s", buf);
+	log_warn (LOG_DEFAULT, "# jonp: java_interop_load_library requested flags=%s; using RTLD_LOCAL|RTLD_NOW", buf);
+	flags = RTLD_LOCAL | RTLD_NOW;
 #endif
 
 	void *handle    = nullptr;
