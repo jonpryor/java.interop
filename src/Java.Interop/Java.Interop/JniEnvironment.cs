@@ -2,10 +2,12 @@
 
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 
 namespace Java.Interop {
@@ -189,6 +191,8 @@ namespace Java.Interop {
 		bool                    disposed;
 		JniRuntime?             runtime;
 
+		List<PeerableCollection>?           scopes;
+
 		public      int                     LocalReferenceCount     {get; internal set;}
 		public      bool                    WithinNewObjectScope    {get; set;}
 		public      JniRuntime              Runtime {
@@ -228,6 +232,12 @@ namespace Java.Interop {
 		public      bool                    IsValid {
 			get {return Runtime != null && environmentPointer != IntPtr.Zero;}
 		}
+
+		public      List<PeerableCollection>?
+		                                    Scopes => scopes;
+
+		public      PeerableCollection?     CurrentScope =>
+			scopes == null ? null : scopes [scopes.Count-1];
 
 		public JniEnvironmentInfo ()
 		{
@@ -279,6 +289,29 @@ namespace Java.Interop {
 			disposed                = true;
 		}
 
+		public PeerableCollection BeginScope (JavaScopeCleanup cleanup)
+		{
+			scopes      = scopes ?? new List<PeerableCollection> ();
+			var scope   = new PeerableCollection () {
+				Cleanup = cleanup,
+			};
+			scopes.Add (scope);
+			return scope;
+		}
+
+		public void EndScope (PeerableCollection scope)
+		{
+			Debug.Assert (scopes != null);
+			if (scopes == null) {
+				return;
+			}
+			Debug.Assert (scopes.Count > 0);
+			scopes.Remove (scope);
+			if (scopes.Count == 0) {
+				scopes = null;
+			}
+		}
+
 #if FEATURE_JNIENVIRONMENT_SAFEHANDLES
 		internal    List<List<JniLocalReference>>   LocalReferences = new List<List<JniLocalReference>> () {
 			new List<JniLocalReference> (),
@@ -294,6 +327,44 @@ namespace Java.Interop {
 			return new JniEnvironmentInvoker ((JniNativeInterfaceStruct*) p);
 		}
 #endif  // !FEATURE_JNIENVIRONMENT_JI_PINVOKES
+	}
+
+	class PeerableCollection : KeyedCollection<int, IJavaPeerable> {
+
+		public JavaScopeCleanup Cleanup { get; set; }
+
+		protected override int GetKeyForItem (IJavaPeerable item) => item.JniIdentityHashCode;
+
+		public IJavaPeerable? GetPeerableForObjectReference (JniObjectReference reference)
+		{
+#if NETCOREAPP
+			if (TryGetValue (JniSystem.IdentityHashCode (reference), out var p) &&
+					JniEnvironment.Types.IsSameObject (reference, p.PeerReference)) {
+				return p;
+			}
+#else   // !NETCOREAPP
+			Collection<IJavaPeerable>   c = this;
+			for (int x = 0; x < c.Count; ++x) {
+				if (JniEnvironment.Types.IsSameObject (reference, c [x].PeerReference)) {
+					return c [x];
+				}
+			}
+#endif  // !NETCOREAPP
+			return null;
+		}
+
+		public override string ToString ()
+		{
+			var c   = (Collection<IJavaPeerable>) this;
+			var s   = new StringBuilder ();
+			s.Append ("PeerableCollection[").Append (Count).Append ("]");
+			for (int i  = 0; i < Count; ++i ) {
+				s.AppendLine ();
+				var e   = c [i];
+				s.Append ($"  [{i}] hash={e.JniIdentityHashCode} ref={e.PeerReference} type={e.GetType ().ToString ()} value=`{e.ToString ()}`");
+			}
+			return s.ToString ();
+		}
 	}
 }
 

@@ -4,6 +4,9 @@
     <TargetFrameworks>net472;netcoreapp3.1</TargetFrameworks>
     <IsPackable>false</IsPackable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>8.0</LangVersion>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>..\..\product.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -50,6 +53,7 @@
     <JavaInteropTestJar Include="$(MSBuildThisFileDirectory)java\com\xamarin\interop\CallVirtualFromConstructorDerived.java" />
     <JavaInteropTestJar Include="$(MSBuildThisFileDirectory)java\com\xamarin\interop\GetThis.java" />
     <JavaInteropTestJar Include="$(MSBuildThisFileDirectory)java\com\xamarin\interop\SelfRegistration.java" />
+    <JavaInteropTestJar Include="$(MSBuildThisFileDirectory)java\com\xamarin\interop\Singleton.java" />
     <JavaInteropTestJar Include="$(MSBuildThisFileDirectory)java\com\xamarin\interop\TestType.java" />
   </ItemGroup>
 

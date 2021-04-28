@@ -19,14 +19,18 @@ namespace Java.Interop {
 		{
 		}
 
-		public override void CollectPeers ()
-		{
-			if (RegisteredInstances == null)
-				throw new ObjectDisposedException (nameof (MonoRuntimeValueManager));
+		public override bool CanCollectPeers => false;
 
+		protected override void CollectPeersCore ()
+		{
+			throw new NotSupportedException ();
+		}
+
+		protected override void DisposePeersCore ()
+		{
 			var peers = new List<IJavaPeerable> ();
 
-			lock (RegisteredInstances) {
+			lock (RegisteredInstances!) {
 				foreach (var ps in RegisteredInstances.Values) {
 					foreach (var p in ps) {
 						peers.Add (p);
@@ -48,22 +52,18 @@ namespace Java.Interop {
 				throw new AggregateException ("Exceptions while collecting peers.", exceptions);
 		}
 
-		public override void AddPeer (IJavaPeerable value)
+		protected override void ReleasePeersCore ()
+		{
+			lock (RegisteredInstances!) {
+				RegisteredInstances.Clear ();
+			}
+		}
+
+		protected override void AddPeerCore (IJavaPeerable value)
 		{
 			if (RegisteredInstances == null)
 				throw new ObjectDisposedException (nameof (MonoRuntimeValueManager));
 
-			var r = value.PeerReference;
-			if (!r.IsValid)
-				throw new ObjectDisposedException (value.GetType ().FullName);
-			var o = PeekPeer (value.PeerReference);
-			if (o != null)
-				return;
-
-			if (r.Type != JniObjectReferenceType.Global) {
-				value.SetPeerReference (r.NewGlobalRef ());
-				JniObjectReference.Dispose (ref r, JniObjectReferenceOptions.CopyAndDispose);
-			}
 			int key = value.JniIdentityHashCode;
 			lock (RegisteredInstances) {
 				List<IJavaPeerable> peers;
@@ -113,7 +113,7 @@ namespace Java.Interop {
 					JniEnvironment.Types.GetJniTypeNameFromInstance (keepValue.PeerReference));
 		}
 
-		public override IJavaPeerable? PeekPeer (JniObjectReference reference)
+		protected override IJavaPeerable? PeekPeerCore (JniObjectReference reference)
 		{
 			if (RegisteredInstances == null)
 				throw new ObjectDisposedException (nameof (MonoRuntimeValueManager));
@@ -139,13 +139,10 @@ namespace Java.Interop {
 			return null;
 		}
 
-		public override void RemovePeer (IJavaPeerable value)
+		protected override void RemovePeerCore (IJavaPeerable value)
 		{
 			if (RegisteredInstances == null)
 				throw new ObjectDisposedException (nameof (MonoRuntimeValueManager));
-
-			if (value == null)
-				throw new ArgumentNullException (nameof (value));
 
 			int key = value.JniIdentityHashCode;
 			lock (RegisteredInstances) {
@@ -164,73 +161,35 @@ namespace Java.Interop {
 			}
 		}
 
-		public override void FinalizePeer (IJavaPeerable value)
-		{
-			var h = value.PeerReference;
-			var o = Runtime.ObjectReferenceManager;
-			// MUST NOT use SafeHandle.ReferenceType: local refs are tied to a JniEnvironment
-			// and the JniEnvironment's corresponding thread; it's a thread-local value.
-			// Accessing SafeHandle.ReferenceType won't kill anything (so far...), but
-			// instead it always returns JniReferenceType.Invalid.
-			if (!h.IsValid || h.Type == JniObjectReferenceType.Local) {
-				if (o.LogGlobalReferenceMessages) {
-					o.WriteGlobalReferenceLine ("Finalizing PeerReference={0} IdentityHashCode=0x{1} Instance=0x{2} Instance.Type={3}",
-							h.ToString (),
-							value.JniIdentityHashCode.ToString ("x"),
-							RuntimeHelpers.GetHashCode (value).ToString ("x"),
-							value.GetType ().ToString ());
-				}
-				RemovePeer (value);
-				value.SetPeerReference (new JniObjectReference ());
-				value.Finalized ();
-				return;
-			}
+		protected override bool ShouldFinalizePeer (IJavaPeerable value) => true;
 
-			RemovePeer (value);
-			if (o.LogGlobalReferenceMessages) {
-				o.WriteGlobalReferenceLine ("Finalizing PeerReference={0} IdentityHashCode=0x{1} Instance=0x{2} Instance.Type={3}",
-						h.ToString (),
-						value.JniIdentityHashCode.ToString ("x"),
-						RuntimeHelpers.GetHashCode (value).ToString ("x"),
-						value.GetType ().ToString ());
-			}
-			value.SetPeerReference (new JniObjectReference ());
-			JniObjectReference.Dispose (ref h);
-			value.Finalized ();
-		}
-
-		public override void ActivatePeer (IJavaPeerable? self, JniObjectReference reference, ConstructorInfo cinfo, object?[]? argumentValues)
+		protected override void ActivatePeerCore (JniObjectReference reference, ConstructorInfo constructor, object?[]? argumentValues)
 		{
 			var runtime = JniEnvironment.Runtime;
 
 			try {
-				var f = runtime.MarshalMemberBuilder.CreateConstructActivationPeerFunc (cinfo);
-				f (cinfo, reference, argumentValues);
+				var f = runtime.MarshalMemberBuilder.CreateConstructActivationPeerFunc (constructor);
+				f (constructor, reference, argumentValues);
 			} catch (Exception e) {
 				var m = string.Format ("Could not activate {{ PeerReference={0} IdentityHashCode=0x{1} Java.Type={2} }} for managed type '{3}'.",
 						reference,
 						runtime.ValueManager.GetJniIdentityHashCode (reference).ToString ("x"),
 						JniEnvironment.Types.GetJniTypeNameFromInstance (reference),
-						cinfo.DeclaringType.FullName);
+						constructor.DeclaringType.FullName);
 				Debug.WriteLine (m);
 
 				throw new NotSupportedException (m, e);
 			}
 		}
 
-		public override List<JniSurfacedPeerInfo> GetSurfacedPeers ()
+		protected override void AddSurfacedPeers (ICollection<JniSurfacedPeerInfo> peers)
 		{
-			if (RegisteredInstances == null)
-				throw new ObjectDisposedException (nameof (MonoRuntimeValueManager));
-
-			lock (RegisteredInstances) {
-				var peers = new List<JniSurfacedPeerInfo> (RegisteredInstances.Count);
+			lock (RegisteredInstances!) {
 				foreach (var e in RegisteredInstances) {
 					foreach (var p in e.Value) {
 						peers.Add (new JniSurfacedPeerInfo (e.Key, new WeakReference<IJavaPeerable> (p)));
 					}
 				}
-				return peers;
 			}
 		}
 	}

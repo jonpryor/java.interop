@@ -109,7 +109,7 @@ namespace Java.Interop {
 					return;
 				}
 
-				JniEnvironment.Runtime.ValueManager.ActivatePeer (self, new JniObjectReference (n_self), cinfo, pvalues);
+				JniEnvironment.Runtime.ValueManager.ActivatePeer (new JniObjectReference (n_self), cinfo, pvalues);
 			}
 			catch (Exception e) when (JniEnvironment.Runtime.ExceptionShouldTransitionToJni (e)) {
 				envp.SetPendingException (e);

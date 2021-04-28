@@ -153,7 +153,10 @@ namespace Java.InteropTests
 			int gref    = JniEnvironment.Runtime.GlobalReferenceCount;
 			Assert.IsTrue (gref <= (grefStartCount),
 					string.Format ("JNI global references: grefStartCount={0}; gref={1}", grefStartCount, gref));
-			JniEnvironment.Runtime.ValueManager.CollectPeers ();
+			var vm      = JniEnvironment.Runtime.ValueManager;
+			if (vm.CanCollectPeers) {
+				vm.CollectPeers ();
+			}
 		}
 
 		[Test]

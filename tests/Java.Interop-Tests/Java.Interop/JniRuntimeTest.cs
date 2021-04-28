@@ -130,34 +130,41 @@ namespace Java.InteropTests
 
 		class ProxyValueManager : JniValueManager {
 
-			public override void AddPeer (IJavaPeerable peer)
+			protected override void AddPeerCore (IJavaPeerable peer)
 			{
 			}
 
-			public override void CollectPeers ()
+			public override bool CanCollectPeers => false;
+
+			protected override void CollectPeersCore ()
 			{
 			}
 
-			public override void FinalizePeer (IJavaPeerable peer)
+			protected override void DisposePeersCore ()
 			{
 			}
 
-			public override List<JniSurfacedPeerInfo>   GetSurfacedPeers ()
+			protected override void ReleasePeersCore ()
+			{
+			}
+
+			protected override bool ShouldFinalizePeer (IJavaPeerable peer) => true;
+
+			protected override void AddSurfacedPeers (ICollection<JniSurfacedPeerInfo> peers)
+			{
+			}
+
+			protected override IJavaPeerable PeekPeerCore (JniObjectReference reference)
 			{
 				return null;
 			}
 
-			public override IJavaPeerable PeekPeer (JniObjectReference reference)
-			{
-				return null;
-			}
-
-			public override void ActivatePeer (IJavaPeerable self, JniObjectReference reference, ConstructorInfo cinfo, object [] argumentValues)
+			protected override void ActivatePeerCore (JniObjectReference reference, ConstructorInfo constructor, object [] argumentValues)
 			{
 				throw new NotImplementedException ();
 			}
 
-			public override void RemovePeer (IJavaPeerable peer)
+			protected override void RemovePeerCore (IJavaPeerable peer)
 			{
 			}
 

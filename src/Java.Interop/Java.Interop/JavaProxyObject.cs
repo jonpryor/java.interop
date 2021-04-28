@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
@@ -28,10 +29,8 @@ namespace Java.Interop {
 			}
 		}
 
-		JavaProxyObject (object value)
+		internal JavaProxyObject (object value)
 		{
-			if (value == null)
-				throw new ArgumentNullException (nameof (value));
 			Value = value;
 		}
 
@@ -56,18 +55,11 @@ namespace Java.Interop {
 			return Value.ToString ();
 		}
 
-		[return: NotNullIfNotNull ("object")]
-		public static JavaProxyObject? GetProxy (object value)
+		protected override void Dispose (bool disposing)
 		{
-			if (value == null)
-				return null;
-
-			lock (CachedValues) {
-				if (CachedValues.TryGetValue (value, out var proxy))
-					return proxy;
-				proxy = new JavaProxyObject (value);
-				CachedValues.Add (value, proxy);
-				return proxy;
+			base.Dispose (disposing);
+			if (disposing) {
+				CachedValues.Remove (Value);
 			}
 		}
 

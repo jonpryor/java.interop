@@ -2,12 +2,14 @@
 
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 
 using Java.Interop.Expressions;
@@ -32,7 +34,7 @@ namespace Java.Interop
 			public  JniValueManager?        ValueManager                {get; set;}
 		}
 
-		JniValueManager?                    valueManager;
+		internal    JniValueManager?                    valueManager;
 		public  JniValueManager             ValueManager                {
 			get => valueManager ?? throw new NotSupportedException ();
 		}
@@ -47,10 +49,14 @@ namespace Java.Interop
 			valueManager    = SetRuntime (manager);
 		}
 
+		/// <include file="../Documentation/Java.Interop/JniRuntime.JniValueManager.xml" path="/docs/member[@name='T:JniValueManager']/*" />
 		public abstract partial class JniValueManager : ISetRuntime, IDisposable {
+
+			readonly    ConditionalWeakTable<object, JavaProxyObject>   cachedValues    = new ConditionalWeakTable<object, JavaProxyObject> ();
 
 			JniRuntime?             runtime;
 			bool                    disposed;
+
 			public      JniRuntime  Runtime {
 				get => runtime ?? throw new NotSupportedException ();
 			}
@@ -74,22 +80,214 @@ namespace Java.Interop
 				disposed = true;
 			}
 
+			/// <include file="../Documentation/Java.Interop/JniRuntime.JniValueManager.xml" path="/docs/member[@name='M:WaitForGCBridgeProcessing']/*" />
 			public abstract void WaitForGCBridgeProcessing ();
 
-			public abstract void CollectPeers ();
+			/// <include file="../Documentation/Java.Interop/JniRuntime.JniValueManager.xml" path="/docs/member[@name='P:CanCollectPeers']/*" />
+			public abstract bool CanCollectPeers { get; }
 
-			public abstract void AddPeer (IJavaPeerable value);
+			/// <include file="../Documentation/Java.Interop/JniRuntime.JniValueManager.xml" path="/docs/member[@name='M:CollectPeers']/*" />
+			public void CollectPeers ()
+			{
+				if (disposed) {
+					throw new ObjectDisposedException (this.GetType ().ToString ());
+				}
+				if (!CanCollectPeers) {
+					throw new NotSupportedException ("CollectPeers() is not supported.");
+				}
+				CollectPeersCore ();
+			}
 
-			public abstract void RemovePeer (IJavaPeerable value);
+			/// <include file="../Documentation/Java.Interop/JniRuntime.JniValueManager.xml" path="/docs/member[@name='M:CollectPeersCore']/*" />
+			protected abstract void CollectPeersCore ();
 
-			public abstract void FinalizePeer (IJavaPeerable value);
+			/// <include file="../Documentation/Java.Interop/JniRuntime.JniValueManager.xml" path="/docs/member[@name='M:DisposePeers']/*" />
+			public void DisposePeers ()
+			{
+				if (disposed) {
+					throw new ObjectDisposedException (this.GetType ().ToString ());
+				}
+				DisposePeersCore ();
+			}
 
-			public abstract List<JniSurfacedPeerInfo>   GetSurfacedPeers ();
+			/// <include file="../Documentation/Java.Interop/JniRuntime.JniValueManager.xml" path="/docs/member[@name='M:DisposePeersCore']/*" />
+			protected abstract void DisposePeersCore ();
 
-			public abstract void ActivatePeer (IJavaPeerable? self, JniObjectReference reference, ConstructorInfo cinfo, object? []? argumentValues);
+			/// <include file="../Documentation/Java.Interop/JniRuntime.JniValueManager.xml" path="/docs/member[@name='M:ReleasePeers']/*" />
+			public void ReleasePeers ()
+			{
+				if (disposed) {
+					throw new ObjectDisposedException (this.GetType ().ToString ());
+				}
+				ReleasePeersCore ();
+			}
+
+			/// <include file="../Documentation/Java.Interop/JniRuntime.JniValueManager.xml" path="/docs/member[@name='M:ReleasePeersCore']/*" />
+			protected abstract void ReleasePeersCore ();
+
+			/// <include file="../Documentation/Java.Interop/JniRuntime.JniValueManager.xml" path="/docs/member[@name='M:AddPeer']/*" />
+			public void AddPeer (IJavaPeerable value)
+			{
+				if (disposed) {
+					throw new ObjectDisposedException (this.GetType ().ToString ());
+				}
+				if (value == null) {
+					throw new ArgumentNullException (nameof (value));
+				}
+
+				var r = value.PeerReference;
+				if (!r.IsValid) {
+					throw new ObjectDisposedException (value.GetType ().FullName);
+				}
+
+				var o = PeekPeer (value.PeerReference);
+				if (o != null)
+					return;
+
+				if (r.Type != JniObjectReferenceType.Global) {
+					value.SetPeerReference (r.NewGlobalRef ());
+					JniObjectReference.Dispose (ref r, JniObjectReferenceOptions.CopyAndDispose);
+				}
+
+				var scope = JniEnvironment.CurrentInfo.CurrentScope;
+
+				if (scope != null) {
+					scope.Add (value);
+				} else {
+					AddPeerCore (value);
+				}
+			}
+
+			protected abstract void AddPeerCore (IJavaPeerable value);
+
+			public void RemovePeer (IJavaPeerable value)
+			{
+				if (disposed) {
+					throw new ObjectDisposedException (this.GetType ().ToString ());
+				}
+				if (value == null) {
+					throw new ArgumentNullException (nameof (value));
+				}
+
+				var scope   = JniEnvironment.CurrentInfo.CurrentScope;
+				if (scope != null && scope.Cleanup != JavaScopeCleanup.RegisterWithManager) {
+					scope.Remove (value);
+				} else {
+					RemovePeerCore (value);
+				}
+			}
+
+			protected abstract void RemovePeerCore (IJavaPeerable value);
+
+			public void FinalizePeer (IJavaPeerable value)
+			{
+				if (disposed) {
+					throw new ObjectDisposedException (this.GetType ().ToString ());
+				}
+				if (value == null) {
+					throw new ArgumentNullException (nameof (value));
+				}
+
+				if (!ShouldFinalizePeer (value)) {
+					GC.ReRegisterForFinalize (value);
+					return;
+				}
+				var h = value.PeerReference;
+				var o = Runtime.ObjectReferenceManager;
+				if (o.LogGlobalReferenceMessages) {
+					o.WriteGlobalReferenceLine ("Finalizing PeerReference={0} IdentityHashCode=0x{1} Instance=0x{2} Instance.Type={3}",
+							h.ToString (),
+							value.JniIdentityHashCode.ToString ("x"),
+							RuntimeHelpers.GetHashCode (value).ToString ("x"),
+							value.GetType ().ToString ());
+				}
+				RemovePeer (value);
+				value.SetPeerReference (new JniObjectReference ());
+				value.Finalized ();
+
+				// MUST NOT use SafeHandle.ReferenceType: local refs are tied to a JniEnvironment
+				// and the JniEnvironment's corresponding thread; it's a thread-local value.
+				// Accessing SafeHandle.ReferenceType won't kill anything (so far...), but
+				// instead it always returns JniReferenceType.Invalid.
+				if (h.IsValid || h.Type != JniObjectReferenceType.Local) {
+					JniObjectReference.Dispose (ref h);
+				}
+			}
+
+			protected abstract bool ShouldFinalizePeer (IJavaPeerable value);
+			// AndroidRuntime: ShouldFinalizePeer(IJavaPeerable value) => !value.PeerReference.IsValid;
+
+			[Flags]
+			public enum PeerLocations {
+				ValueManager    = 1 << 0,
+				CurrentThread   = 1 << 1,
+				AllThreads      = 1 << 2,
+				Everywhere      = ValueManager | CurrentThread | AllThreads,
+			}
+			public List<JniSurfacedPeerInfo> GetSurfacedPeers (PeerLocations locations = PeerLocations.Everywhere)
+			{
+				if (disposed) {
+					throw new ObjectDisposedException (this.GetType ().ToString ());
+				}
+
+				var peers = new List<JniSurfacedPeerInfo> ();
+
+				if (locations.HasFlag (PeerLocations.ValueManager))
+					AddSurfacedPeers (peers);
+				if (locations.HasFlag (PeerLocations.AllThreads)) {
+					foreach (var info in JniEnvironment.Info.Values) {
+						AddScopes (info.Scopes);
+					}
+				}
+				if (locations.HasFlag (PeerLocations.CurrentThread) && !locations.HasFlag (PeerLocations.AllThreads)) {
+					AddScopes (JniEnvironment.CurrentInfo.Scopes);
+				}
+
+				return peers;
+
+				void AddScopes (List<PeerableCollection>? scopes) {
+					if (scopes == null) {
+						return;
+					}
+					foreach (var scope in scopes) {
+						if (scope == null) {
+							continue;
+						}
+						foreach (var peer in scope) {
+							peers.Add (new JniSurfacedPeerInfo (peer.JniIdentityHashCode, CreateRef (peer)));
+						}
+					}
+				}
+
+				WeakReference<IJavaPeerable> CreateRef (IJavaPeerable value) {
+					return new WeakReference<IJavaPeerable> (value, trackResurrection: false);
+				}
+			}
+
+			protected abstract void AddSurfacedPeers (ICollection<JniSurfacedPeerInfo> collection);
+
+			public void ActivatePeer (JniObjectReference reference, ConstructorInfo constructor, object? []? argumentValues)
+			{
+				if (disposed) {
+					throw new ObjectDisposedException (this.GetType ().ToString ());
+				}
+				if (!reference.IsValid) {
+					throw new ArgumentException ("reference is not valid", nameof (reference));
+				}
+				if (constructor == null) {
+					throw new ArgumentNullException (nameof (constructor));
+				}
+				ActivatePeerCore (reference, constructor, argumentValues);
+			}
+
+			protected abstract void ActivatePeerCore (JniObjectReference reference, ConstructorInfo constructor, object?[]? argumentValues);
 
 			public void ConstructPeer (IJavaPeerable peer, ref JniObjectReference reference, JniObjectReferenceOptions options)
 			{
+				if (disposed) {
+					throw new ObjectDisposedException (this.GetType ().ToString ());
+				}
+
 				if (peer == null)
 					throw new ArgumentNullException (nameof (peer));
 
@@ -137,7 +335,7 @@ namespace Java.Interop
 				return JniSystem.IdentityHashCode (reference);
 			}
 
-			public virtual void DisposePeer (IJavaPeerable value)
+			public void DisposePeer (IJavaPeerable value)
 			{
 				if (disposed)
 					throw new ObjectDisposedException (GetType ().Name);
@@ -160,9 +358,6 @@ namespace Java.Interop
 
 			void DisposePeer (JniObjectReference h, IJavaPeerable value)
 			{
-				if (disposed)
-					throw new ObjectDisposedException (GetType ().Name);
-
 				var o = Runtime.ObjectReferenceManager;
 				if (o.LogGlobalReferenceMessages) {
 					o.WriteGlobalReferenceLine ("Disposing PeerReference={0} IdentityHashCode=0x{1} Instance=0x{2} Instance.Type={3} Java.Type={4}",
@@ -186,7 +381,7 @@ namespace Java.Interop
 				GC.SuppressFinalize (value);
 			}
 
-			public virtual void DisposePeerUnlessReferenced (IJavaPeerable value)
+			public void DisposePeerUnlessReferenced (IJavaPeerable value)
 			{
 				if (disposed)
 					throw new ObjectDisposedException (GetType ().Name);
@@ -205,7 +400,26 @@ namespace Java.Interop
 				DisposePeer (h, value);
 			}
 
-			public abstract IJavaPeerable? PeekPeer (JniObjectReference reference);
+			public IJavaPeerable? PeekPeer (JniObjectReference reference)
+			{
+				if (disposed) {
+					throw new ObjectDisposedException (this.GetType ().ToString ());
+				}
+
+				if (!reference.IsValid)
+					return null;
+
+				var scope   = JniEnvironment.CurrentInfo.CurrentScope;
+				if (scope != null && scope.Cleanup != JavaScopeCleanup.RegisterWithManager) {
+					var peer    = scope.GetPeerableForObjectReference (reference);
+					if (peer != null) {
+						return peer;
+					}
+				}
+				return PeekPeerCore (reference);
+			}
+
+			protected abstract IJavaPeerable? PeekPeerCore (JniObjectReference reference);
 
 			public object? PeekValue (JniObjectReference reference)
 			{
@@ -267,7 +481,7 @@ namespace Java.Interop
 				return type;
 			}
 
-			public virtual IJavaPeerable? CreatePeer (ref JniObjectReference reference, JniObjectReferenceOptions transfer, Type? targetType)
+			public IJavaPeerable? CreatePeer (ref JniObjectReference reference, JniObjectReferenceOptions transfer, Type? targetType)
 			{
 				if (disposed)
 					throw new ObjectDisposedException (GetType ().Name);
@@ -278,10 +492,56 @@ namespace Java.Interop
 				if (!typeof (IJavaPeerable).IsAssignableFrom (targetType))
 					throw new ArgumentException ($"targetType `{targetType.AssemblyQualifiedName}` must implement IJavaPeerable!", nameof (targetType));
 
+				if (transfer == JniObjectReferenceOptions.None || !reference.IsValid) {
+					return null;
+				}
+
+				var peer    = CreatePeerCore (ref reference, transfer, targetType, out var ctorSigs);
+				if (peer != null) {
+					return peer;
+				}
+				// Could be that:
+				//  1. we're within a JniPeerRegistrationScope stack, and
+				//  2. current scope entry didn't register this type, and
+				//  3. `reference` refers to an *already created* instance which is in a *parent* or "global" scope
+				// PeekPeer() won't find it because of (1) + (2); look in *all* scopes.
+				peer    = TryGetPeerFromScopes (reference);
+				if (peer != null) {
+					if (targetType.IsAssignableFrom (peer.GetType ())) {
+						return peer;
+					}
+					throw new NotSupportedException ($"Found peer `{peer.GetType()}` for reference=`{reference}`, which is not convertible to type `{targetType}`.");
+				}
+				var error = new StringBuilder ();
+				error.Append ("Could not find an appropriate constructor wrapper for Java type ")
+					.Append (JniEnvironment.Types.GetJniTypeNameFromInstance (reference))
+					.Append ("`.  Looked for constructor signatures: ");
+				foreach (var ctorSig in (ctorSigs ?? new Type[][]{})) {
+					error.Append (targetType.FullName).Append ("(");
+					bool first = true;
+					foreach (var t in ctorSig) {
+						if (!first) {
+							error.Append (", ");
+						}
+						first = false;
+						error.Append (t);
+					}
+					error.Append (")");
+				}
+				throw new NotSupportedException (error.ToString ());
+			}
+
+			protected virtual IJavaPeerable? CreatePeerCore (ref JniObjectReference reference, JniObjectReferenceOptions transfer, Type targetType, out IEnumerable<Type>[]? attemptedConstructorSignatures)
+			{
+				attemptedConstructorSignatures  = null;
+
 				var ctor = GetPeerConstructor (reference, targetType);
-				if (ctor == null)
-					throw new NotSupportedException (string.Format ("Could not find an appropriate constructable wrapper type for Java type '{0}', targetType='{1}'.",
-							JniEnvironment.Types.GetJniTypeNameFromInstance (reference), targetType));
+				if (ctor == null) {
+					attemptedConstructorSignatures = new[]{
+						new[]{ByRefJniObjectReference, typeof (JniObjectReferenceOptions)},
+					};
+					return null;
+				}
 
 				var acts = new object[] {
 					reference,
@@ -294,6 +554,27 @@ namespace Java.Interop
 				} finally {
 					reference   = (JniObjectReference) acts [0];
 				}
+			}
+
+			IJavaPeerable? TryGetPeerFromScopes (JniObjectReference reference)
+			{
+				var scopes  = JniEnvironment.CurrentInfo.Scopes;
+				if (scopes == null) {
+					return null;
+				}
+
+				int count   = (scopes.Count - 1);
+				for (int i = count; i >= 0; --i) {
+					var scope   = scopes [i];
+					if (scope.Cleanup == JavaScopeCleanup.RegisterWithManager) {
+						continue;
+					}
+					var peer    = scope.GetPeerableForObjectReference (reference);
+					if (peer != null) {
+						return peer;
+					}
+				}
+				return PeekPeerCore (reference);
 			}
 
 			static  readonly    Type    ByRefJniObjectReference = typeof (JniObjectReference).MakeByRefType ();
@@ -589,6 +870,21 @@ namespace Java.Interop
 			{
 				return ProxyValueMarshaler.Instance;
 			}
+
+			[return: NotNullIfNotNull ("object")]
+			internal JavaProxyObject?  GetProxy (object value)
+			{
+				if (value == null)
+					return null;
+
+				lock (cachedValues) {
+					if (cachedValues.TryGetValue (value, out var proxy))
+						return proxy;
+					proxy = new JavaProxyObject (value);
+					cachedValues.Add (value, proxy);
+					return proxy;
+				}
+			}
 		}
 	}
 
@@ -770,7 +1066,7 @@ namespace Java.Interop
 				return new JniValueMarshalerState (s, vm);
 			}
 
-			var p   = JavaProxyObject.GetProxy (value);
+			var p   = jvm.ValueManager.GetProxy (value);
 			return new JniValueMarshalerState (p!.PeerReference.NewLocalRef ());
 		}
 

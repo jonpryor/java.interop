@@ -35,35 +35,42 @@ namespace Java.InteropTests {
 			{
 			}
 
-			public override void CollectPeers ()
+			public override bool CanCollectPeers => false;
+
+			protected override void AddPeerCore (IJavaPeerable peer)
 			{
 			}
 
-			public override void AddPeer (IJavaPeerable reference)
+			protected override void CollectPeersCore ()
 			{
 			}
 
-			public override void RemovePeer (IJavaPeerable reference)
+			protected override void DisposePeersCore ()
 			{
 			}
 
-			public override void FinalizePeer (IJavaPeerable reference)
+			protected override void ReleasePeersCore ()
 			{
 			}
 
-			public override List<JniSurfacedPeerInfo> GetSurfacedPeers ()
+			protected override bool ShouldFinalizePeer (IJavaPeerable peer) => true;
+
+			protected override void AddSurfacedPeers (ICollection<JniSurfacedPeerInfo> peers)
+			{
+			}
+
+			protected override IJavaPeerable PeekPeerCore (JniObjectReference reference)
 			{
 				return null;
 			}
 
-			public override IJavaPeerable PeekPeer (JniObjectReference reference)
-			{
-				return null;
-			}
-
-			public override void ActivatePeer (IJavaPeerable self, JniObjectReference reference, ConstructorInfo cinfo, object [] argumentValues)
+			protected override void ActivatePeerCore (JniObjectReference reference, ConstructorInfo constructor, object [] argumentValues)
 			{
 				throw new NotImplementedException ();
+			}
+
+			protected override void RemovePeerCore (IJavaPeerable peer)
+			{
 			}
 		}
 

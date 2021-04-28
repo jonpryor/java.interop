@@ -1,0 +1,193 @@
+﻿<?xml version="1.0"?>
+<docs>
+  <member name="T:JniValueManager">
+    <summary>
+      Manages the mapping between Java instances and registered managed instances.
+    </summary>
+    <remarks>
+      <para>
+        <c>JniRuntime.JniValueManager</c> manages a mapping between Java instances,
+        and <see cref="T:IJavaPeerable" /> instances.  A <c>IJavaPeerable</c> is
+        <i>registered</i> if it has been added to <c>JniRuntime.JniValueManager</c>.
+        Certain methods only deal with registered instances.  Managed-to-Java instance
+        method invocation does not require the use of registered instances.
+        Java-to-Managed instance method invocation requires the use of registred
+        instances; if possible, a managed peer will be implicitly created.
+        See <see cref="M:GetValue" /> for details.
+      </para>
+      <list type="bullet">
+        <item><term>
+            Marshaling infrastructure:
+            <see cref="M:WaitForGCBridgeProcessing" />.
+        </term></item>
+        <item><term>
+            Lifetime management of all registered peers:
+            <see cref="M:CollectPeers" />,
+            <see cref="M:DisposePeers" />,
+            <see cref="M:ReleasePeers" />.
+        </term></item>
+        <item><term>
+            Registration management for individual peers:
+            <see cref="M:ActivatePeer" />,
+            <see cref="M:AddPeer" />,
+            <see cref="M:ConstructPeer" />,
+            <see cref="M:DisposePeer" />,
+            <see cref="M:RemovePeer" />.
+        </term></item>
+        <item><term>
+            Java-to-managed marshaling support:
+            <see cref="M:GetValue{T}" />,
+            <see cref="M:GetValue" />,
+            <see cref="M:GetValueMarshaler" />.
+        </term></item>
+        <item><term>
+            Managed-to-Java marshaling support:
+            <see cref="M:GetValueMarshaler" />.
+        </term></item>
+      </list>
+      <para>
+        Managed-to-Java marshaling support is handled via explicit usage,
+        or "generically" via <see cref="T:JniValueMarshaler" /> and
+        <see cref="T:JniValueMarshaler{T}" />.
+      </para>
+      <block subset="none" type="overrides">
+        All subclasses must be thread safe.
+      </block>
+    </remarks>
+    <threadsafe>This type is thread safe.</threadsafe>
+  </member>
+  <!--
+    Marshaling Infrastructure
+    -->
+  <member name="M:WaitForGCBridgeProcessing">
+    <summary>
+      Infrastructure.  Called during Java-to-managed transitions.
+    </summary>
+  </member>
+  <!--
+    Global peer lifetime maangement
+    -->
+  <member name="P:CanCollectPeers">
+    <summary>
+      Whether or not <see cref="M:CollectPeers" /> is supported.
+    </summary>
+    <remarks>
+      <para>
+        When <c>CanCollectPeers</c> returns <c>false</c>, calls to
+        <see cref="M:CollectPeers" /> will throw
+        <see cref="T:System.NotSupportedException" />.
+      </para>
+    </remarks>
+  </member>
+  <member name="M:CollectPeers">
+    <summary>
+      Garbage collects all peer instances.
+    </summary>
+    <remarks>
+      <para>
+        When <c>CanCollectPeers</c> returns <c>false</c>, calls to
+        <see cref="M:CollectPeers" /> will throw
+        <see cref="T:System.NotSupportedException" />.
+      </para>
+    </remarks>
+    <exception cref="T:System.NotSupportedException">
+      Garbage collection of peers is not supported.
+    </exception>
+    <exception cref="T:System.ObjectDisposedException">
+      <see cref="M:Dispose()" /> has previously been invoked.
+    </exception>
+  </member>
+  <member name="M:CollectPeersCore">
+    <summary>
+      Garbage collects all peer instances.
+    </summary>
+    <remarks>
+      <block subset="none" type="overrides">
+        <para>The <c>CollectPeersCore</c> method will not be invoked
+        after <c>Dispose()</c> has been invoked.</para>
+      </block>
+    </remarks>
+    <exception cref="T:System.NotSupportedException">
+      Garbage collection of peers is not supported.
+    </exception>
+  </member>
+  <member name="M:DisposePeers">
+    <summary>
+      Dispose of all registered peer instances.
+    </summary>
+    <remarks>
+      <para>
+        Calls <see cref="M:System.IDisposable.Dispose" /> on all peer instances.
+      </para>
+    </remarks>
+    <exception cref="T:System.AggregateException">
+      Contains all exceptions thrown by registered instances when calling
+      <see cref="M:System.IDisposable.Dispose" />.
+    </exception>
+    <exception cref="T:System.ObjectDisposedException">
+      <see cref="M:Dispose" /> has previously been invoked.
+    </exception>
+  </member>
+  <member name="M:DisposePeersCore">
+    <summary>
+      Dispose of all registered peer instances.
+    </summary>
+    <remarks>
+      <block subset="none" type="overrides">
+        <para>
+        The <c>DisposePeersCore</c> method will not be invoked
+        after <see cref="M:Dispose" /> has been invoked.</para>
+        <para>Inheritors should invoke <see cref="M:System.IDisposable.Dispose" />
+        on all peer instances.  Should any peer throw from the <c>Dispose</c>
+        invocation, then <c>DisposePeersCore</c> should capture all thrown
+        exceptions and re-raise them within a <see cref="T:System.AggregateException" />.
+        </para>
+      </block>
+    </remarks>
+    <exception cref="T:System.AggregateException">
+      Contains all exceptions thrown by <see cref="M:System.IDisposable.Dispose" />.
+    </exception>
+  </member>
+  <member name="M:ReleasePeers">
+    <summary>
+      Release all registered peer instances.
+    </summary>
+    <remarks>
+      <para>
+        The <c>JniValueManager</c> unregisters all peers.
+        Methods such as <see cref="M:PeekPeer" /> will not find return any peers.
+      </para>
+      <para>
+        Peer values may still be used, even if not referenced by a <c>JniValueManager</c>.
+      </para>
+    </remarks>
+    <exception cref="T:System.ObjectDisposedException">
+      <see cref="M:Dispose" /> has previously been invoked.
+    </exception>
+  </member>
+  <member name="M:ReleasePeersCore">
+    <summary>
+      Release all registered peer instances.
+    </summary>
+    <remarks>
+      <block subset="none" type="overrides">
+        <para>The <c>ReleasePeersCore</c> method will not be invoked
+        after <c>Dispose()</c> has been invoked.</para>
+      </block>
+    </remarks>
+  </member>
+  <!--
+    Lifetime management for individual peers
+  -->
+  <member name="M:AddPeer">
+    <summary>
+      Register a managed peer.
+    </summary>
+    <remarks>
+      <block subset="none" type="overrides">
+        <para>The <c>ReleasePeersCore</c> method will not be invoked
+        after <c>Dispose()</c> has been invoked.</para>
+      </block>
+    </remarks>
+  </member>
+</docs>

@@ -14,6 +14,8 @@ using System.Diagnostics.CodeAnalysis;
 
 [assembly: SuppressMessage ("Design", "CA1024:Use properties where appropriate", Justification = "<Pending>", Scope = "member", Target = "~M:Java.Interop.JniRuntime.GetRegisteredRuntimes()")]
 
+[assembly: SuppressMessage ("Design", "CA1031:Do not catch general exception types", Justification = "Excceptions are bundled into an AggregateException and rethrown", Scope = "type", Target = "~M:Java.Interop.JavaScope.Dispose")]
+
 [assembly: SuppressMessage ("Design", "CA1032:Implement standard exception constructors", Justification = "System.Runtime.Serialization.SerializationInfo doesn't exist in our targeted PCL profile, so we can't provide the (SerializationInfo, StreamingContext) constructor.", Scope = "type", Target = "~T:Java.Interop.JavaProxyThrowable")]
 [assembly: SuppressMessage ("Design", "CA1032:Implement standard exception constructors", Justification = "System.Runtime.Serialization.SerializationInfo doesn't exist in our targeted PCL profile, so we can't provide the (SerializationInfo, StreamingContext) constructor.", Scope = "type", Target = "~T:Java.Interop.JniLocationException")]
 

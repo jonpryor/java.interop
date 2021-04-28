@@ -240,7 +240,7 @@ namespace Java.InteropTests
 
 	[JniTypeSignature ("java/lang/Object")]
 	class MyDisposableObject : JavaObject {
-		bool _isDisposed;
+		internal bool _isDisposed;
 
 		public MyDisposableObject ()
 		{

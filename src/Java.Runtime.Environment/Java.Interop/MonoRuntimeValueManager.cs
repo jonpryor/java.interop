@@ -63,9 +63,49 @@ namespace Java.Interop {
 			NativeMethods.java_interop_gc_bridge_wait_for_bridge_processing (bridge);
 		}
 
-		public override void CollectPeers ()
+		public override bool CanCollectPeers => true;
+
+		protected override void CollectPeersCore ()
 		{
 			GC.Collect ();
+		}
+
+		protected override void DisposePeersCore ()
+		{
+			List<WeakReference<IJavaPeerable>> values;
+
+			lock (RegisteredInstances!) {
+				values = new List<WeakReference<IJavaPeerable>> (RegisteredInstances.Count);
+				foreach (var o in RegisteredInstances.Values) {
+					values.AddRange (o);
+				}
+				RegisteredInstances.Clear ();
+			}
+
+			List<Exception>?    exceptions  = null;
+			foreach (var r in values) {
+				IJavaPeerable t;
+				if (!r.TryGetTarget (out t))
+					continue;
+				try {
+					t.Dispose ();
+				}
+				catch (Exception e) {
+					exceptions  = exceptions ?? new List<Exception>();
+					exceptions.Add (e);
+					Trace.WriteLine (e);
+				}
+			}
+			if (exceptions != null) {
+				throw new AggregateException (exceptions);
+			}
+		}
+
+		protected override void ReleasePeersCore ()
+		{
+			lock (RegisteredInstances!) {
+				RegisteredInstances.Clear ();
+			}
 		}
 
 		protected override void Dispose (bool disposing)
@@ -78,18 +118,6 @@ namespace Java.Interop {
 			if (RegisteredInstances == null)
 				return;
 
-			lock (RegisteredInstances) {
-				foreach (var o in RegisteredInstances.Values) {
-					foreach (var r in o) {
-						IJavaPeerable t;
-						if (!r.TryGetTarget (out t))
-							continue;
-						t.Dispose ();
-					}
-				}
-				RegisteredInstances.Clear ();
-				RegisteredInstances = null;
-			}
 
 			if (bridge != IntPtr.Zero) {
 				NativeMethods.java_interop_gc_bridge_remove_current_app_domain (bridge);
@@ -100,40 +128,24 @@ namespace Java.Interop {
 		Dictionary<int, List<WeakReference<IJavaPeerable>>>?    RegisteredInstances = new Dictionary<int, List<WeakReference<IJavaPeerable>>>();
 
 
-		public override List<JniSurfacedPeerInfo> GetSurfacedPeers ()
+		protected override void AddSurfacedPeers (ICollection<JniSurfacedPeerInfo> peers)
 		{
 			if (RegisteredInstances == null)
 				throw new ObjectDisposedException (nameof (MonoRuntimeValueManager));
 
 			lock (RegisteredInstances) {
-				var peers = new List<JniSurfacedPeerInfo> (RegisteredInstances.Count);
 				foreach (var e in RegisteredInstances) {
 					foreach (var p in e.Value) {
 						peers.Add (new JniSurfacedPeerInfo (e.Key, p));
 					}
 				}
-				return peers;
 			}
 		}
 
-		public override void AddPeer (IJavaPeerable value)
+		protected override void AddPeerCore (IJavaPeerable value)
 		{
-			if (RegisteredInstances == null)
-				throw new ObjectDisposedException (nameof (MonoRuntimeValueManager));
-
-			var r = value.PeerReference;
-			if (!r.IsValid)
-				throw new ObjectDisposedException (value.GetType ().FullName);
-			var o = PeekPeer (value.PeerReference);
-			if (o != null)
-				return;
-
-			if (r.Type != JniObjectReferenceType.Global) {
-				value.SetPeerReference (r.NewGlobalRef ());
-				JniObjectReference.Dispose (ref r, JniObjectReferenceOptions.CopyAndDispose);
-			}
 			int key = value.JniIdentityHashCode;
-			lock (RegisteredInstances) {
+			lock (RegisteredInstances!) {
 				List<WeakReference<IJavaPeerable>> peers;
 				if (!RegisteredInstances.TryGetValue (key, out peers)) {
 					peers = new List<WeakReference<IJavaPeerable>> () {
@@ -187,16 +199,10 @@ namespace Java.Interop {
 			return (peer.JniManagedPeerState & JniManagedPeerStates.Replaceable) == JniManagedPeerStates.Replaceable;
 		}
 
-		public override void RemovePeer (IJavaPeerable value)
+		protected override void RemovePeerCore (IJavaPeerable value)
 		{
-			if (RegisteredInstances == null)
-				throw new ObjectDisposedException (nameof (MonoRuntimeValueManager));
-
-			if (value == null)
-				throw new ArgumentNullException (nameof (value));
-
 			int key = value.JniIdentityHashCode;
-			lock (RegisteredInstances) {
+			lock (RegisteredInstances!) {
 				List<WeakReference<IJavaPeerable>> peers;
 				if (!RegisteredInstances.TryGetValue (key, out peers))
 					return;
@@ -218,17 +224,11 @@ namespace Java.Interop {
 			}
 		}
 
-		public override IJavaPeerable? PeekPeer (JniObjectReference reference)
+		protected override IJavaPeerable? PeekPeerCore (JniObjectReference reference)
 		{
-			if (RegisteredInstances == null)
-				throw new ObjectDisposedException (nameof (MonoRuntimeValueManager));
-
-			if (!reference.IsValid)
-				return null;
-
 			int key = GetJniIdentityHashCode (reference);
 
-			lock (RegisteredInstances) {
+			lock (RegisteredInstances!) {
 				List<WeakReference<IJavaPeerable>> peers;
 				if (!RegisteredInstances.TryGetValue (key, out peers))
 					return null;
@@ -257,95 +257,26 @@ namespace Java.Interop {
 			}
 		}
 
-		public override void ActivatePeer (IJavaPeerable? self, JniObjectReference reference, ConstructorInfo cinfo, object?[]? argumentValues)
+		protected override void ActivatePeerCore (JniObjectReference reference, ConstructorInfo constructor, object?[]? argumentValues)
 		{
 			var runtime = JniEnvironment.Runtime;
 
 			try {
-				var f = runtime.MarshalMemberBuilder.CreateConstructActivationPeerFunc (cinfo);
-				f (cinfo, reference, argumentValues);
+				var f = runtime.MarshalMemberBuilder.CreateConstructActivationPeerFunc (constructor);
+				f (constructor, reference, argumentValues);
 			} catch (Exception e) {
 				var m = string.Format ("Could not activate {{ PeerReference={0} IdentityHashCode=0x{1} Java.Type={2} }} for managed type '{3}'.",
 						reference,
 						runtime.ValueManager.GetJniIdentityHashCode (reference).ToString ("x"),
 						JniEnvironment.Types.GetJniTypeNameFromInstance (reference),
-						cinfo.DeclaringType.FullName);
+						constructor.DeclaringType.FullName);
 				Debug.WriteLine (m);
 
 				throw new NotSupportedException (m, e);
 			}
 		}
 
-		public override void FinalizePeer (IJavaPeerable value)
-		{
-			var h = value.PeerReference;
-			var o = Runtime.ObjectReferenceManager;
-			// MUST NOT use SafeHandle.ReferenceType: local refs are tied to a JniEnvironment
-			// and the JniEnvironment's corresponding thread; it's a thread-local value.
-			// Accessing SafeHandle.ReferenceType won't kill anything (so far...), but
-			// instead it always returns JniReferenceType.Invalid.
-			if (!h.IsValid || h.Type == JniObjectReferenceType.Local) {
-				if (o.LogGlobalReferenceMessages) {
-					o.WriteGlobalReferenceLine ("Finalizing PeerReference={0} IdentityHashCode=0x{1} Instance=0x{2} Instance.Type={3}",
-							h.ToString (),
-							value.JniIdentityHashCode.ToString ("x"),
-							RuntimeHelpers.GetHashCode (value).ToString ("x"),
-							value.GetType ().ToString ());
-				}
-				RemovePeer (value);
-				value.SetPeerReference (new JniObjectReference ());
-				value.Finalized ();
-				return;
-			}
-
-			try {
-				bool collected  = TryGC (value, ref h);
-				if (collected) {
-					RemovePeer (value);
-					value.SetPeerReference (new JniObjectReference ());
-					if (o.LogGlobalReferenceMessages) {
-						o.WriteGlobalReferenceLine ("Finalizing PeerReference={0} IdentityHashCode=0x{1} Instance=0x{2} Instance.Type={3}",
-								h.ToString (),
-								value.JniIdentityHashCode.ToString ("x"),
-								RuntimeHelpers.GetHashCode (value).ToString ("x"),
-								value.GetType ().ToString ());
-					}
-					value.Finalized ();
-				} else {
-					value.SetPeerReference (h);
-					GC.ReRegisterForFinalize (value);
-				}
-			} catch (Exception e) {
-				Runtime.FailFast ("Unable to perform a GC! " + e);
-			}
-		}
-
-		/// <summary>
-		///   Try to garbage collect <paramref name="value"/>.
-		/// </summary>
-		/// <returns>
-		///   <c>true</c>, if <paramref name="value"/> was collected and
-		///   <paramref name="handle"/> is invalid; otherwise <c>false</c>.
-		/// </returns>
-		/// <param name="value">
-		///   The <see cref="T:Java.Interop.IJavaPeerable"/> instance to collect.
-		/// </param>
-		/// <param name="handle">
-		///   The <see cref="T:Java.Interop.JniObjectReference"/> of <paramref name="value"/>.
-		///   This value may be updated, and <see cref="P:Java.Interop.IJavaObject.PeerReference"/>
-		///   will be updated with this value.
-		/// </param>
-		internal protected virtual bool TryGC (IJavaPeerable value, ref JniObjectReference handle)
-		{
-			if (!handle.IsValid)
-				return true;
-			var wgref = handle.NewWeakGlobalRef ();
-			JniObjectReference.Dispose (ref handle);
-			JniGC.Collect ();
-			handle = wgref.NewGlobalRef ();
-			JniObjectReference.Dispose (ref wgref);
-			return !handle.IsValid;
-		}
+		protected override bool ShouldFinalizePeer (IJavaPeerable value) => !value.PeerReference.IsValid;
 	}
 
 	static class JavaLangRuntime {
