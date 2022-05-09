@@ -1,10 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net472</TargetFramework>
+    <TargetFrameworks>net6.0</TargetFrameworks>
     <OutputType>Exe</OutputType>
     <LangVersion>8.0</LangVersion>
     <AssemblyName>jnimarshalmethod-gen</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DefineConstants>FEATURE_COMPILE_TO_METHODBUILDER;$(DefineConstants)</DefineConstants>
   </PropertyGroup>
 
   <Import Project="..\..\TargetFrameworkDependentValues.props" />
@@ -18,6 +20,12 @@
   <PropertyGroup Condition=" '$(_DumpRegisterNativeMembers)' == 'True' ">
     <DefineConstants>_DUMP_REGISTER_NATIVE_MEMBERS;$(DefineConstants)</DefineConstants>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\external\ILPack\src\**\*.cs" />
+    <Compile Remove="..\..\external\ILPack\src\Properties\*.cs" />
+    <Compile Include="..\..\src-ThirdParty\dotnet-runtime\System.Linq.Expressions\src\**\*.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Mono.Options" />

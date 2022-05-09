@@ -289,12 +289,11 @@ namespace Xamarin.Android.Tools.JniMarshalMethodGenerator {
 			if (Verbose)
 				ColorWriteLine ($"Preparing marshal method assembly '{assemblyName}'", ConsoleColor.Cyan);
 
-			var da = AppDomain.CurrentDomain.DefineDynamicAssembly (
+			var da = AssemblyBuilder.DefineDynamicAssembly (
 					assemblyName,
-					AssemblyBuilderAccess.Save,
-					destDir);
+					AssemblyBuilderAccess.Run);
 
-			var dm = da.DefineDynamicModule ("<default>", fileName);
+			var dm = da.DefineDynamicModule ("<default>");
 
 			var ad = resolver.GetAssembly (path);
 
@@ -357,7 +356,7 @@ namespace Xamarin.Android.Tools.JniMarshalMethodGenerator {
 						BindingFlags.Instance | BindingFlags.Static;
 
 				var methods = type.GetMethods (flags);
-				Array.Sort (methods, new MethodsComparer (type, td));
+//				Array.Sort (methods, new MethodsComparer (type, td));
 
 				addedMethods.Clear ();
 
@@ -404,7 +403,7 @@ namespace Xamarin.Android.Tools.JniMarshalMethodGenerator {
 							System.Reflection.MethodAttributes.Public | System.Reflection.MethodAttributes.Static);
 
 					var lambda  = builder.CreateMarshalToManagedExpression (method);
-					lambda.CompileToMethod (mb);
+					lambda.Compile ();
 
 					if (export != null) {
 						name = export.Name;
@@ -425,11 +424,13 @@ namespace Xamarin.Android.Tools.JniMarshalMethodGenerator {
 			foreach (var tb in definedTypes)
 				tb.Value.CreateType ();
 
-			da.Save (fileName);
-
 			if (Verbose)
 				ColorWriteLine ($"Marshal method assembly '{assemblyName}' created", ConsoleColor.Cyan);
 
+			var g = new Lokad.ILPack.AssemblyGenerator ();
+			g.GenerateAssembly (da, "Foo-JniMarshalMethods.dll");
+
+#if false
 			resolver.SearchDirectories.Add (destDir);
 			var dstAssembly = resolver.GetAssembly (fileName);
 
@@ -441,6 +442,7 @@ namespace Xamarin.Android.Tools.JniMarshalMethodGenerator {
 
 			if (!keepTemporary)
 				FilesToDelete.Add (dstAssembly.MainModule.FileName);
+#endif  // false
 		}
 
 		static  readonly    MethodInfo          Delegate_CreateDelegate             = typeof (Delegate).GetMethod ("CreateDelegate", new[] {
@@ -505,7 +507,7 @@ namespace Xamarin.Android.Tools.JniMarshalMethodGenerator {
 			Console.WriteLine ($"## Dumping contents of `{dt.FullName}::__RegisterNativeMembers`: ");
 			Console.WriteLine (lambda.ToCSharpCode ());
 #endif  // _DUMP_REGISTER_NATIVE_MEMBERS
-			lambda.CompileToMethod (rb);
+			lambda.Compile ();
 		}
 
 		static void ColorMessage (string message, ConsoleColor color, TextWriter writer, bool writeLine = true)
