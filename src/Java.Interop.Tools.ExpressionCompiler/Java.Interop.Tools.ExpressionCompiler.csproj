@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net7.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DefineConstants>FEATURE_COMPILE_TO_METHODBUILDER;$(DefineConstants)</DefineConstants>
+  </PropertyGroup>
+
+  <Import Project="..\..\TargetFrameworkDependentValues.props" />
+
+  <PropertyGroup>
+    <OutputPath>$(UtilityOutputFullPath)</OutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\src-ThirdParty\dotnet-runtime\src\libraries\*\src\**\*.cs" />
+  </ItemGroup>
+  <!-- 
+  <ItemGroup>
+    <Compile Include="..\..\src-ThirdParty\dotnet-runtime\**\*.cs" />
+    <Compile Remove="..\..\src-ThirdParty\dotnet-runtime\System.Linq.Expressions\src\System\Linq\Expressions\Interpreter\**\*.cs" />
+  </ItemGroup>
+  -->
+
+  <Import Project="Java.Interop.Tools.ExpressionCompiler.targets" />
+
+</Project>

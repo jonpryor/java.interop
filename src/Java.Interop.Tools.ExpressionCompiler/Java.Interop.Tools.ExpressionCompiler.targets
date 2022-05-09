@@ -1,0 +1,51 @@
+<Project>
+
+  <PropertyGroup>
+    <StringResourcesPath>$(MSBuildProjectDirectory)/../../src-ThirdParty/dotnet-runtime/src/libraries/System.Linq.Expressions/src/Resources/Strings.resx</StringResourcesPath>
+    <StringResourcesNamespace Condition="'$(StringResourcesNamespace)' == ''">Java.Interop.Tools.ExpressionCompiler</StringResourcesNamespace>
+    <StringResourcesClassName Condition="'$(StringResourcesClassName)' == ''">SR</StringResourcesClassName>
+    <StringResourcesName Condition="'$(StringResourcesName)' == ''">FxResources.$(AssemblyName).$(StringResourcesClassName)</StringResourcesName>
+
+    <!-- We define our own implementation of GetResourceString -->
+    <GenerateResxSourceOmitGetResourceString>true</GenerateResxSourceOmitGetResourceString>
+    <!-- For debug builds we include the full value string so that we get actual resources, even in the case the toolchain strips the resources file -->
+    <GenerateResxSourceIncludeDefaultValues Condition="'$(Configuration)' == 'Debug'">true</GenerateResxSourceIncludeDefaultValues>
+  </PropertyGroup>
+
+  <!-- Include files under StringResourcesPath by convention unless OmitResources is set. -->
+  <ItemGroup Condition="'$(StringResourcesPath)' != '' and '$(OmitResources)' != 'true'"> 
+    <!-- Delete the embedded resource item pointing to StringResourcesPath in case the
+         EnableDefaultEmbeddedResourceItems glob didn't include it and include it again. -->
+    <EmbeddedResource Remove="$(StringResourcesPath)" Condition="'$(EnableDefaultEmbeddedResourceItems)' == 'true'" />
+    <EmbeddedResource Include="$(StringResourcesPath)"
+                      Visible="true"
+                      ManifestResourceName="$(StringResourcesName)"
+                      GenerateSource="true"
+                      StronglyTypedFilename="$(IntermediateOutputPath)StringResources.g.cs"
+                      StronglyTypedLanguage="C#"
+                      StronglyTypedNamespace="$(StringResourcesNamespace)"
+                      StronglyTypedClassName="$(StringResourcesClassName)"
+                      PublicClass="False"
+                      ClassName="$(StringResourcesNamespace).$(StringResourcesClassName)" />
+  </ItemGroup>
+
+  <Target Name="_RemoveSystemLinqExpressions"
+      BeforeTargets="CoreCompile">
+    <ItemGroup>
+      <_SlePath
+          Condition=" %(ReferencePathWithRefAssemblies.Filename) == 'System.Linq.Expressions' "
+          Include="@(ReferencePathWithRefAssemblies)"
+      />
+    </ItemGroup>
+    <PropertyGroup>
+      <_SlePath>%(_SlePath.Identity)</_SlePath>
+    </PropertyGroup>
+    <ItemGroup>
+      <ReferencePathWithRefAssemblies Remove="$(_SlePath)" />
+    </ItemGroup>
+    <ItemGroup>
+      <ReferencePathWithRefAssemblies Include="@(_SlePath)" Aliases="SystemSleLib" />
+    </ItemGroup>
+  </Target>
+
+</Project>

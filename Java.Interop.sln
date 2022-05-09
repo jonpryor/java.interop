@@ -107,6 +107,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Java.Base", "src\Java.Base\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Java.Base-Tests", "tests\Java.Base-Tests\Java.Base-Tests.csproj", "{CB05E11B-B96F-4179-A4E9-5D6BDE29A8FC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Java.Interop.Tools.ExpressionCompiler", "src\Java.Interop.Tools.ExpressionCompiler\Java.Interop.Tools.ExpressionCompiler.csproj", "{C2D47CBB-D029-47F5-8918-C8D5E100711A}"
+EndProject
 Global
 	GlobalSection(SharedMSBuildProjectFiles) = preSolution
 		src\Java.Interop.NamingCustomAttributes\Java.Interop.NamingCustomAttributes.projitems*{58b564a1-570d-4da2-b02d-25bddb1a9f4f}*SharedItemsImports = 5
@@ -122,6 +124,10 @@ Global
 		{D1295A8F-4F42-461D-A046-564476C10002}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D1295A8F-4F42-461D-A046-564476C10002}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D1295A8F-4F42-461D-A046-564476C10002}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C2D47CBB-D029-47F5-8918-C8D5E100711A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C2D47CBB-D029-47F5-8918-C8D5E100711A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C2D47CBB-D029-47F5-8918-C8D5E100711A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C2D47CBB-D029-47F5-8918-C8D5E100711A}.Release|Any CPU.Build.0 = Release|Any CPU
 		{7387E151-48E3-4885-B2CA-A74434A34045}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{7387E151-48E3-4885-B2CA-A74434A34045}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7387E151-48E3-4885-B2CA-A74434A34045}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -308,6 +314,7 @@ Global
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{D1295A8F-4F42-461D-A046-564476C10002} = {C8F58966-94BF-407F-914A-8654F8B8AE3B}
+		{C2D47CBB-D029-47F5-8918-C8D5E100711A} = {C8F58966-94BF-407F-914A-8654F8B8AE3B}
 		{7387E151-48E3-4885-B2CA-A74434A34045} = {C8F58966-94BF-407F-914A-8654F8B8AE3B}
 		{38C762AB-8FD1-44DE-9855-26AAE7129DC3} = {C8F58966-94BF-407F-914A-8654F8B8AE3B}
 		{D14A1B5C-2060-4930-92BE-F7190256C735} = {C8F58966-94BF-407F-914A-8654F8B8AE3B}

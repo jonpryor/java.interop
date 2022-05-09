@@ -2,3 +2,6 @@
 	path = external/xamarin-android-tools
 	url = https://github.com/xamarin/xamarin-android-tools.git
 	branch = main
+[submodule "external/ILPack"]
+	path = external/ILPack
+	url = https://github.com/Lokad/ILPack.git
